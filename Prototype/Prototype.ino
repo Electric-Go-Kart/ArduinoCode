@@ -15,7 +15,7 @@
  *        22: Output to turn on Headlights 
  */
 
-#include <Servo.h>
+#include<Servo.h>
 Servo steeringServo;
 
 #include <TFMini.h>
@@ -58,135 +58,111 @@ void setup() {
   
   delay(50);                                                   // Let signals stabilize
 }
-
 void loop() {
   static int throttle_pulse = 1000;                            // These 4 are the pulse length in microseconds that they are active high
-  static int steer_pulse = 1500;                               // These 4 are the pulse length in microseconds that they are active high
-  static int drive_state_pulse = 1000;                         // These 4 are the pulse length in microseconds that they are active high
-  static int headlights_pulse = 1000;                          // These 4 are the pulse length in microseconds that they are active high
+  static int steer_pulse = 1500;
+  static int drive_state_pulse = 1000;
+  static int headlights_pulse = 1000;
   static int drive_state = 0;                                  // 0=neutral, 1=drive, 2=reverse
-  static bool safe_path = true;                               // Whether or not the path is clear
-  //static int channel_in = 0; // 0=throttle, 1=steer, 2=drive_state, 3=headlights - counter for getting pulse inputs
-  
-// this will be moved to interupt section that runs every 20ms (how long the period is of PWM signals to DC motor
-  /*if(channel_in == 0){ // update throttle
-    throttle_pulse = pulseIn(throttle, HIGH, 30000);
-    updateThrottleOut(throttle_pulse, drive_state);
-    channel_in++;
- 
-  } else if(channel_in == 1){ // update steering direction
-    steer_pulse = pulseIn(steer, HIGH, 30000);
-    updateSteering(steer_pulse);
-    channel_in++;
-    
-  } else if(channel_in == 2){ // update drive_state
-    drive_state_pulse = pulseIn(DriveOrReverse, HIGH, 30000);
-    drive_state = updateDriveState(drive_state_pulse);
-    channel_in++;
-    
-  } else {  // update headlights on/off
-    headlights_pulse = pulseIn(headlights, HIGH, 30000);
-    updateHeadlights(headlights_pulse);
-    channel_in = 0;
-  }*/
+  static bool safe_path = true;                                // I suspect that clear_path caused issues, so I changed it to safe_path
 
-  safe_path=distanceCheck();                                  // Use LiDar to see if there is an obstacle
-  
+  path_safe = distanceCheck();
+
   throttle_pulse = pulseIn(throttle, HIGH, 30000);
-  updateThrottleOut(throttle_pulse, drive_state, safe_path);
-
+  updateThrottleOut(throttle_pulse, drive_state, path_safe);
+ 
   steer_pulse = pulseIn(steer, HIGH, 30000);
   updateSteering(steer_pulse);
-
+ 
   drive_state_pulse = pulseIn(DriveOrReverse, HIGH, 30000);
-  updateDriveState(drive_state_pulse);
-
+  drive_state = updateDriveState(drive_state_pulse);
+ 
   headlights_pulse = pulseIn(headlights, HIGH, 30000);
   updateHeadlights(headlights_pulse);
-  
 }
 
-void updateThrottleOut(int &pulse, int &drive_state, bool &safe_path){
-  static int setRpm1 = 0, setRpm2 = 0;            // Initialize RPM's
-
-  if(drive_state == 0){                           // Neutral - Ouput Low Low to start breaking and bring car to stop
+void updateThrottleOut(int &pulse, int &drive_state, bool &path_safe){
+  static int setRpm1 = 0, setRpm2 = 0;
+  
+  if(drive_state == 0){                                        // We are in Neutral - Ouput L L to start breaking and bring car to stop
     setRpm1 = 0;
     setRpm2 = 0;
-    analogWrite(PWMout1, setRpm1);                // Set both PWM to 0
-    analogWrite(PWMout2, setRpm2);                // Set both PWM to 0
-    
-  } else if(drive_state == 1 && safe_path){      // Drive - Output High, Low to drive forward
-      if(pulse > 1100 && pulse < 2050)                // if not clear path, will go into else and stop car
-        setRpm1 = map(pulse, 1100, 2050, 0, 255); // Map input pulse to PWM output duty cycle between 0 and 255
-      else 
-        setRpm1 = 0;                              // If input pulse is too slow, stay still
-        
-      setRpm2 = 0;                                // Second needs to be Low to drive Forwards
-      analogWrite(PWMout2, setRpm2);              // Set second PWM Low
-      delay(10);                                  // Small delay
-      analogWrite(PWMout1, setRpm1);              // Set first PWM to PWM signal
-    
-  } else if(drive_state == 2){                    // Reverse - Output Low High to drive backwards (just opposite of drive)
-      if(pulse > 1100 && pulse < 2050)
-        setRpm2 = map(pulse, 1100, 2050, 0, 255); // map input pulse to PWM output duty cycle between 0 and 255
-      else 
-        setRpm2 = 0;                              // If input pulse is too slow, stay still
-        
-      setRpm1 = 0;                                // First needs to be Low to Reverse
-      analogWrite(PWMout1, setRpm1);              // Set first PWM Low
-      delay(10);                                  // Small delay
-      analogWrite(PWMout2, setRpm2);              // Set second PWM to PWM signal
-    
-  } else {                                        // Default Case - Output Low Low to stop
-      setRpm1 = 0;
-      setRpm2 = 0;
-      analogWrite(PWMout1, setRpm1);              // Set them both to 0
-      analogWrite(PWMout2, setRpm2);              // Set them both to 0
+    analogWrite(PWMout1, setRpm1);                             // set them both to 0
+    analogWrite(PWMout2, setRpm2);                             // set them both to 0
+
+  } else if(drive_state == 1 && path_safe){                    // We are in Drive - Output H L to drive forward
+    if(pulse > 1100 && pulse < 2050)
+      setRpm1 = map(pulse, 1100, 2050, 0, 255);                // map input pulse to PWM output duty cycle between 0 and 255
+    else 
+        setRpm1 = 0;                                           // if input pulse is too slow, stay still
+    setRpm2 = 0;                                               // Second needs to be low to drive Forwards
+    analogWrite(PWMout2, setRpm2);                             // set them both to 0
+    delay(10);                                                 // small delay
+    analogWrite(PWMout1, setRpm1);                             // set PWM1 to PWM signal
+
+  } else if(drive_state == 2){                                 // We are in Reverse - Output L H to drive backwards (just opposite of drive)
+   if(pulse > 1100 && pulse < 2050)
+      setRpm2 = map(pulse, 1100, 2050, 0, 255);                // map input pulse to PWM output duty cycle between 0 and 255
+    else 
+      setRpm2 = 0;                                             // if input pulse is too slow, stay still
+    setRpm1 = 0;                                               // First needs to be low to Reverse
+    analogWrite(PWMout1, setRpm1);                             // set them both to 0
+    delay(10);                                                 // small delay
+    analogWrite(PWMout2, setRpm2);                             // set PWM2 to PWM signal
+
+  } else {                                                     // should never happen, but if something goes wrong, do nothing by outputting both Low
+    setRpm1 = 0;
+    setRpm2 = 0;
+    analogWrite(PWMout1, setRpm1);                             // set them both to 0
+    analogWrite(PWMout2, setRpm2);                             // set them both to 0
   }
 }
 
-void updateHeadlights(int &pulse){                // Reads in if pulse is long or short, and turns on and off headlights
-    if(pulse > 1500 && pulse < 2050)
-      digitalWrite(lightsPIN, HIGH);              // Turn on headlights
-     else 
-      digitalWrite(lightsPIN, LOW);               // Turn off headlights    
+void updateHeadlights(int &pulse){                             // Reads in if pulse is long or short, and turns on and off headlights
+    if(pulse > 1500 && pulse < 2050){
+      digitalWrite(lightsPIN, HIGH);                           // Turn on Headlights
+    } else {
+      digitalWrite(lightsPIN, LOW);                            // Turn off Headlights
+    }
 }
 
 int updateDriveState(int &pulse){
-  if(pulse > 1600 && pulse < 2050){               // Reverse
+  if(pulse > 1600 && pulse < 2050){                            // It is in Reverse
     return 2;
-  } else if(pulse > 1400 && pulse <= 1600){       // Drive
-      return 1;
-  } else if(pulse > 950 && pulse <= 1400){        // Neutral
-      return 0;
+  } else if(pulse > 1400 && pulse <= 1600){                    // It is in Drive
+    return 1;
+  } else if(pulse > 950 && pulse <= 1400){                     // It is in Neutral
+    return 0;
   }
 }
 
 void updateSteering(int &pulse){
-  if(pulse < 950 || pulse > 2050){                // If invalid pulse length, return to original position 
+  if(pulse < 950 || pulse > 2050){                             // if invalid pulse length, return to original position 
     steeringServo.write(90);  
     return;
   } 
-  servoPosNew = map(pulse, 980, 2020, 0, 180);    // + 12. Will need to change this to only rotate 90 degrees with of offset of 12 currently in order to recenter after turning 
+  servoPosNew = map(pulse, 980, 2020, 0, 180); 
   if(servoPosNew > 180)
     servoPosNew = 180;
-    
-  steeringServo.write(servoPosNew);               // Write the new position
+  steeringServo.write(servoPosNew);
   delay(50);
 }
 
 boolean distanceCheck(){
   static uint16_t distance_one = 0; 
-  static uint16_t distance_two = 0;               // Initialize the Variables
-  Sensor1.externalTrigger();                      // Trigger the sensor
-  distance_one = Sensor1.getDistance();           // Read Data
-  Sensor2.externalTrigger();                      // Repeat
+  static uint16_t distance_two = 0;                            // Initialize the Variables
+  Sensor1.externalTrigger();                                   // Trigger the sensor
+  distance_one = Sensor1.getDistance();                        // Read Data
+  Sensor2.externalTrigger();                                   // Repeat
   distance_two = Sensor2.getDistance();
+  //Serial.println(distance_one);
+  //Serial.println(distance_two);
+  //Serial.println();
   
-  if (distance_one < 100 || distance_two < 100) // Ensure that the distance is correct
-    return false;                                 // Less than 100 cm is unsafe
+  if (distance_one < 100 || distance_two < 100)                // Ensure that the distance is correct
+    return false;                                              // Less than 100 cm is unsafe
   else
-    return true;                                  // Greater than 100 cm is safe
-                                                  // Measurements which are out of range will give the value 65535, which is the maximum value of a 16 bit unsigned integer.
-                                                  // The range of this sensor should be 1500 cm, but has not been verified.
-}
+    return true;                                               // Greater than 100 cm is safe
+                                                               // Measurements which are out of range will give the value 65535, which is the maximum value of a 16 bit unsigned integer.
+                                                               // The range of this sensor should be 1500 cm, but has not been verified.
+} 
